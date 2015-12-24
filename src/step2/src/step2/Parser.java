@@ -27,116 +27,110 @@ public class Parser {
 	public static final String jrePath = "C:\\Program Files (x86)\\Java\\jre1.8.0_65\\lib\\rt.jar";
 
 	/*public static void main(String[] args) throws IOException {
-
-		// read java files
-		final File folder = new File(projectSourcePath);
-		ArrayList<File> javaFiles = listJavaFilesForFolder(folder);
-
-		//
-		for (File fileEntry : javaFiles) {
-			String content = FileUtils.readFileToString(fileEntry);
-			// System.out.println(content);
-
-			CompilationUnit parse = parse(content.toCharArray());
-
-			// print methods info
-			printMethodInfo(parse);
-
-			// print variables info
-			printVariableInfo(parse);
-			
-			//print method invocations
-			printMethodInvocationInfo(parse);
-
-		}
-	}*/
-
-	// read all java files from specific folder
-	public static ArrayList<File> listJavaFilesForFolder(final File folder) {
-		ArrayList<File> javaFiles = new ArrayList<File>();
-		for (File fileEntry : folder.listFiles()) {
-			if (fileEntry.isDirectory()) {
-				javaFiles.addAll(listJavaFilesForFolder(fileEntry));
-			} else if (fileEntry.getName().contains(".java")) {
-				// System.out.println(fileEntry.getName());
-				javaFiles.add(fileEntry);
-			}
-		}
-
-		return javaFiles;
-	}
-
-	// create AST
-	protected static CompilationUnit parse(char[] classSource) {
-		ASTParser parser = ASTParser.newParser(AST.JLS4); // java +1.6
-		parser.setResolveBindings(true);
-		parser.setKind(ASTParser.K_COMPILATION_UNIT);
- 
-		parser.setBindingsRecovery(true);
- 
-		Map options = JavaCore.getOptions();
-		parser.setCompilerOptions(options);
- 
-		parser.setUnitName("");
- 
-		String[] sources = { projectSourcePath }; 
-		String[] classpath = {jrePath};
- 
-		parser.setEnvironment(classpath, sources, new String[] { "UTF-8"}, true);
-		parser.setSource(classSource);
+	// read java files
+	final File folder = new File(projectSourcePath);
+	ArrayList<File> javaFiles = listJavaFilesForFolder(folder);
+	//
+	for (File fileEntry : javaFiles) {
+		String content = FileUtils.readFileToString(fileEntry);
+		// System.out.println(content);
+		CompilationUnit parse = parse(content.toCharArray());
+		// print methods info
+		printMethodInfo(parse);
+		// print variables info
+		printVariableInfo(parse);
 		
-		return (CompilationUnit) parser.createAST(null); // create and parse
+		//print method invocations
+		printMethodInvocationInfo(parse);
+	}
+}*/
+
+// read all java files from specific folder
+public static ArrayList<File> listJavaFilesForFolder(final File folder) {
+	ArrayList<File> javaFiles = new ArrayList<File>();
+	for (File fileEntry : folder.listFiles()) {
+		if (fileEntry.isDirectory()) {
+			javaFiles.addAll(listJavaFilesForFolder(fileEntry));
+		} else if (fileEntry.getName().contains(".java")) {
+			// System.out.println(fileEntry.getName());
+			javaFiles.add(fileEntry);
+		}
 	}
 
-	// navigate method information
-	public static void printMethodInfo(CompilationUnit parse) {
-		MethodDeclarationVisitor visitor = new MethodDeclarationVisitor();
-		parse.accept(visitor);
+	return javaFiles;
+}
 
-		for (MethodDeclaration method : visitor.getMethods()) {
-			System.out.println("Method name: " + method.getName()
-					+ " Return type: " + method.getReturnType2());
+// create AST
+protected static CompilationUnit parse(char[] classSource) {
+	ASTParser parser = ASTParser.newParser(AST.JLS4); // java +1.6
+	parser.setResolveBindings(true);
+	parser.setKind(ASTParser.K_COMPILATION_UNIT);
+
+	parser.setBindingsRecovery(true);
+
+	Map options = JavaCore.getOptions();
+	parser.setCompilerOptions(options);
+
+	parser.setUnitName("");
+
+	String[] sources = { projectSourcePath }; 
+	String[] classpath = {jrePath};
+
+	parser.setEnvironment(classpath, sources, new String[] { "UTF-8"}, true);
+	parser.setSource(classSource);
+	
+	return (CompilationUnit) parser.createAST(null); // create and parse
+}
+
+// navigate method information
+public static void printMethodInfo(CompilationUnit parse) {
+	MethodDeclarationVisitor visitor = new MethodDeclarationVisitor();
+	parse.accept(visitor);
+
+	for (MethodDeclaration method : visitor.getMethods()) {
+		System.out.println("Method name: " + method.getName()
+				+ " Return type: " + method.getReturnType2());
+	}
+
+}
+
+// navigate variables inside method
+public static void printVariableInfo(CompilationUnit parse) {
+
+	MethodDeclarationVisitor visitor1 = new MethodDeclarationVisitor();
+	parse.accept(visitor1);
+	for (MethodDeclaration method : visitor1.getMethods()) {
+
+		VariableDeclarationFragmentVisitor visitor2 = new VariableDeclarationFragmentVisitor();
+		method.accept(visitor2);
+
+		for (VariableDeclarationFragment variableDeclarationFragment : visitor2
+				.getVariables()) {
+			System.out.println("variable name: "
+					+ variableDeclarationFragment.getName()
+					+ " variable Initializer: "
+					+ variableDeclarationFragment.getInitializer());
 		}
 
 	}
+}
 
-	// navigate variables inside method
-	public static void printVariableInfo(CompilationUnit parse) {
+// navigate method invocations inside method
+	public static void printMethodInvocationInfo(CompilationUnit parse) {
 
 		MethodDeclarationVisitor visitor1 = new MethodDeclarationVisitor();
 		parse.accept(visitor1);
 		for (MethodDeclaration method : visitor1.getMethods()) {
 
-			VariableDeclarationFragmentVisitor visitor2 = new VariableDeclarationFragmentVisitor();
+			MethodInvocationVisitor visitor2 = new MethodInvocationVisitor();
 			method.accept(visitor2);
 
-			for (VariableDeclarationFragment variableDeclarationFragment : visitor2
-					.getVariables()) {
-				System.out.println("variable name: "
-						+ variableDeclarationFragment.getName()
-						+ " variable Initializer: "
-						+ variableDeclarationFragment.getInitializer());
+			for (MethodInvocation methodInvocation : visitor2.getMethods()) {
+				System.out.println("method " + method.getName() + " invoc method "
+						+ methodInvocation.getName());
 			}
 
 		}
 	}
-	
-	// navigate method invocations inside method
-		public static void printMethodInvocationInfo(CompilationUnit parse) {
-
-			MethodDeclarationVisitor visitor1 = new MethodDeclarationVisitor();
-			parse.accept(visitor1);
-			for (MethodDeclaration method : visitor1.getMethods()) {
-
-				MethodInvocationVisitor visitor2 = new MethodInvocationVisitor();
-				method.accept(visitor2);
-
-				for (MethodInvocation methodInvocation : visitor2.getMethods()) {
-					System.out.println("method " + method.getName() + " invoc method "
-							+ methodInvocation.getName());
-				}
-
-			}
-		}
 
 }
