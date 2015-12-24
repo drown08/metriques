@@ -4,10 +4,13 @@ import java.io.File;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 import org.apache.commons.io.FileUtils;
+import org.eclipse.jdt.core.dom.AST;
 import org.eclipse.jdt.core.dom.CompilationUnit;
+import org.eclipse.jdt.core.dom.MethodDeclaration;
 import org.eclipse.jdt.core.dom.SingleVariableDeclaration;
 import org.eclipse.jdt.core.dom.TypeDeclaration;
 import org.eclipse.jdt.core.dom.VariableDeclarationFragment;
@@ -63,6 +66,20 @@ public class MyParser extends Parser {
 		//Categorie Coupling
 		Map<String, ArrayList<String>> couplage = new HashMap<String, ArrayList<String>>();
 		
+		//Catégorie Polymorphisme
+		Map<String, String> myFilsPereMap = new HashMap<String,String>();
+		ArrayList<MethodDeclaration> parentList = new ArrayList<MethodDeclaration>();
+		ArrayList<MethodDeclaration> childList = new ArrayList<MethodDeclaration>();
+		int nbTotOfOverridingMethods = 0;
+		ArrayList<String> listOfClasses = new ArrayList<String>();
+		//Récuppération des noms des classes
+		for (File fileEntry : javaFiles) {
+			String tmp = fileEntry.getName();
+			tmp = tmp.substring(0,tmp.length()-5); //On enlève ".java"
+			listOfClasses.add(tmp);
+		}
+		
+		//BOUCLE PRINCIPALE POUR CREATION DES DIFFERENTES METRIQUES
 		for (File fileEntry : javaFiles) {
 			
 			String content = FileUtils.readFileToString(fileEntry);
@@ -76,10 +93,10 @@ public class MyParser extends Parser {
 			//On réccupère le nb de méthode par fichier (Donc par classe normalement)
 			//1ere metrique, calcul du nombre de méthodes dans une classe
 			nbMethodsPerClass = methodInfoNb(parse);
-			if(nbMethodsPerClass<nbMinMethodPerClass){
+			if(nbMethodsPerClass < nbMinMethodPerClass){
 				nbMinMethodPerClass = nbMethodsPerClass;
 			}
-			if(nbMethodsPerClass>nbMaxMethodPerClass) {
+			if(nbMethodsPerClass > nbMaxMethodPerClass) {
 				nbMaxMethodPerClass = nbMethodsPerClass;
 			}
 			nbFullOfMethod += nbMethodsPerClass;
@@ -137,7 +154,46 @@ public class MyParser extends Parser {
 				l.add(s);
 			}
 			couplage.put(fileEntry.getName(), l);
+			
+			//Catégorie polymorphisme (NMO)
+			String tmpClassName = fileEntry.getName();
+			tmpClassName = tmpClassName.substring(0,tmpClassName.length()-5); //On enlève ".java"
+			for (String name : listOfClasses){ //On parcours notre liste des noms des classes
+					if(content.contains("public class "+tmpClassName+" extends "+name)){
+						//Cf. Deuxième boucle de traitement
+						myFilsPereMap.put(tmpClassName,name);
+					}	
+			}
 		}
+		
+		//Deuxième boucle traitement : spécifique au polymorphisme
+		//Il faut comparer la signature des méthodes de classFille avec celle de classPere
+		for(Map.Entry<String, String> entry : myFilsPereMap.entrySet()){
+			 System.out.println("Classe enfant : "+entry.getKey() + " / Classe parent : " + entry.getValue());
+			for(File fileBis : javaFiles){
+				String contentBis = FileUtils.readFileToString(fileBis);
+				CompilationUnit parseBis = parse(contentBis.toCharArray());
+				if(fileBis.getName().equals(entry.getKey()+".java")){ //Méthodes de la classe fille
+					//Alors on réccupère la liste de ses méthodes avec un visiteur
+					childList = (ArrayList<MethodDeclaration>) getAllMethods(parseBis);
+				}
+				if(fileBis.getName().equals(entry.getValue()+".java")) {
+					//Idem
+					parentList = (ArrayList<MethodDeclaration>) getAllMethods(parseBis); //Méthodes de la classe mère
+				}
+			}
+			//Ensuite, il faut comparer les méthodes 1 à 1 pour voir si overriding, si oui ++
+			for(MethodDeclaration pere : parentList) {
+				String firstLine[] = pere.toString().split("\\{");//Pour avoir simplement la signature
+				for(MethodDeclaration fils : childList) {
+					String line[] = fils.toString().split("\\{");//Pour avoir simplement la signature
+					if(firstLine[0].equals(line[0])){
+						nbTotOfOverridingMethods++;
+					}
+				}
+			}
+		}
+		
 		System.out.println("General : ");
 		System.out.println("Nombre de classes :  " +nbClasses + "\n");
 		System.out.println("");
@@ -202,6 +258,12 @@ public class MyParser extends Parser {
 		System.out.println("\n  ===> Categorie REUSE ");
 		System.out.println("Reuse ratio : " + ( (double) abstracts * 100 ) / (double) nbClasses + "%");
 		
+		
+		System.out.println("\n ===> Catégorie Nombre de méthodes surchargées par une sous classe (NMO)");
+		System.out.println("Nombre total de méthodes surchargées : " + nbTotOfOverridingMethods);
+		//Il faut réccupérer les méthodes de la "première classe",
+		//Puis il faut regarder si dans ses classes filles, les méthodes sont overrides,
+		//Si, Pour une méthode, oui, alors +1, sinon +0
 	}
 	
 
@@ -252,5 +314,15 @@ public class MyParser extends Parser {
 		parse.accept(visitor);
 		return visitor;
 	}
+	
+	public static List<MethodDeclaration> getAllMethods (CompilationUnit parse) {
+		MethodDeclarationVisitor visitor = new MethodDeclarationVisitor();
+		parse.accept(visitor);
+		List<MethodDeclaration> allMethods = new ArrayList<MethodDeclaration>();
+		allMethods.addAll(visitor.getMethods());
+		allMethods.addAll(visitor.getStaticMethods());
+		return allMethods;
+	}
+	
 
 }
